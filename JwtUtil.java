@@ -1,34 +1,39 @@
 package util;
-import io.jsonwebtoken.*;
-import io.jsonwebtoken.io.Decoders;
-import io.jsonwebtoken.security.Keys;
-import java.security.Key;
-import java.util.Date;
 
+import io.jsonwebtoken.*;
+import io.jsonwebtoken.security.Keys;
+
+import javax.crypto.SecretKey;
+import java.util.Date;
+import java.util.UUID;
 
 public class JwtUtil {
-    private static final String SECRET_KEY = String.valueOf(Keys.hmacShaKeyFor(("MySuperSecretKeyMySuperSecretKey".getBytes())));
-    private static final Key key = Keys.hmacShaKeyFor(Decoders.BASE64.decode(SECRET_KEY));
-    private static final long EXPIRATION_TIME = 120*60*1000*10;
-    public static String generateToken(String userName) {
-        return Jwts.builder().setSubject(userName)
+    private static final SecretKey SECRET_KEY = Keys.secretKeyFor(SignatureAlgorithm.HS512);
+
+    public static String generateToken(String subject) {
+        return Jwts.builder()
+                .setSubject(subject)
                 .setIssuedAt(new Date())
-                .setExpiration(new Date (System.currentTimeMillis()+EXPIRATION_TIME))
-                .signWith(key,SignatureAlgorithm.HS256).compact();
+                .setExpiration(new Date(System.currentTimeMillis() + 1000 * 60 * 60 * 10)) // 10 ساعت
+                .signWith(SECRET_KEY)
+                .compact();
     }
-    public static String validateToken(String token) {
-        try{
-            return Jwts.parserBuilder().setSigningKey(key)
-                    .build()
+
+    public static String validateToken(String token) throws JwtException {
+        if (token == null || token.trim().isEmpty()) {
+            System.err.println("Error: token is null or empty in validateToken");
+            throw new JwtException("Token cannot be null or empty");
+        }
+        System.out.println("Validating JWT token: " + token);
+        try {
+            return Jwts.parser()
+                    .setSigningKey(SECRET_KEY)
                     .parseClaimsJws(token)
                     .getBody()
                     .getSubject();
+        } catch (JwtException e) {
+            System.err.println("Error in validateToken: " + e.getMessage());
+            throw e;
         }
-        catch (JwtException e){
-            return null;
-        }
-    }
-    public static Key getkey() {
-        return key;
     }
 }

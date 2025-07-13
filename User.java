@@ -1,53 +1,83 @@
-package Entity;
-
-import jakarta.persistence.*; // Use jakarta.persistence instead of javax.persistence
-import java.util.Date;         // For Date types
+package entity;
+import javax.persistence.*;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.UUID;
 
 @Entity
 @Inheritance(strategy = InheritanceType.SINGLE_TABLE)
-@DiscriminatorColumn(name="role"
-, discriminatorType = DiscriminatorType.STRING)
+@DiscriminatorColumn(name = "user_type", discriminatorType = DiscriminatorType.STRING)
 @Table(name="users")
 public class User {
 
     @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
-    private Long id;
+    @GeneratedValue(strategy = GenerationType.AUTO)
+    private UUID id;
 
-    @Column(nullable = false, unique = true)
-    private String username;
+    @Column(nullable = false)
+    private String fullName;
+
+    @Column(unique = true, nullable = false)
+    private String phone;
+
+    @Column
+    private String email;
 
     @Column(nullable = false)
     private String password;
 
-    @Temporal(TemporalType.TIMESTAMP)
     @Column(nullable = false)
-    private Date createdAt;
+    private String role;
+
+    @Column(nullable = false)
+    private String address;
+    @Column
+    private String profileImageBase64;
+
+    @Embedded
+    private BankInfo bankInfo;
 
 
-    @OneToOne(mappedBy = "user", cascade = CascadeType.ALL)
-    private Profile profile;
-    @OneToOne(mappedBy = "user", cascade = CascadeType.ALL)
-    private UserWallet userWallet;
-    @OneToOne(mappedBy = "user", cascade = CascadeType.ALL)
+    @OneToOne(cascade = CascadeType.ALL, mappedBy = "user")
     private ShoppingCart shoppingCart;
-    @PrePersist
-    protected void onCreate() {
-        if (this.createdAt == null) {
-            this.createdAt = new Date();
-        }
+
+    @OneToOne(cascade = CascadeType.ALL, mappedBy = "user")
+    private UserWallet userWallet;
+    @OneToMany(mappedBy = "user", cascade = CascadeType.ALL, orphanRemoval = true)
+    private List<Order> orders = new ArrayList<>();
+    @ManyToMany
+    @JoinTable(
+            name = "favorites",
+            joinColumns = @JoinColumn(name = "user_id"),
+            inverseJoinColumns = @JoinColumn(name = "restaurant_id")
+    )
+    private List<Restaurant> favorites = new ArrayList<>();
+    public User() {}
+    public UUID getId() { return id; }
+    public void setId(UUID id) { this.id = id; }
+
+    public String getFullName() {
+        return fullName;
     }
 
-    public Long getId() {
-        return id;
+    public void setFullName(String fullName) {
+        this.fullName = fullName;
     }
 
-    public String getUsername() {
-        return username;
+    public String getPhone() {
+        return phone;
     }
 
-    public void setUsername(String username) {
-        this.username = username;
+    public void setPhone(String phone) {
+        this.phone = phone;
+    }
+
+    public String getEmail() {
+        return email;
+    }
+
+    public void setEmail(String email) {
+        this.email = email;
     }
 
     public String getPassword() {
@@ -57,29 +87,72 @@ public class User {
     public void setPassword(String password) {
         this.password = password;
     }
-
-    public Date getCreatedAt() {
-        return createdAt;
+    public String getRole() {
+        return role;
+    }
+    public void setRole(String role) {
+        this.role = role;
+    }
+    public String getAddress() {
+        return address;
+    }
+    public void setAddress(String address) {
+        this.address = address;
+    }
+    public String getProfileImageBase64() {
+        return profileImageBase64;
+    }
+    public void setProfileImageBase64(String profileImageBase64) {
+        this.profileImageBase64 = profileImageBase64;
+    }
+    public BankInfo getBankInfo() {
+        return bankInfo;
+    }
+    public void setBankInfo(BankInfo bankInfo) {
+        this.bankInfo = bankInfo;
     }
 
-    public void setCreatedAt(Date createdAt) {
-        this.createdAt = createdAt;
+    public UserWallet getUserWallet() {
+        return userWallet;
+    }
+    public void setUserWallet(UserWallet userWallet) {
+        this.userWallet = userWallet;
+    }
+    public ShoppingCart getShoppingCart() {
+        return shoppingCart;
+    }
+    public void setShoppingCart(ShoppingCart shoppingCart) {
+        this.shoppingCart = shoppingCart;
+    }
+    public List<Order> getOrders() {
+        return orders;
+    }
+    public void addOrder(Order order) {
+        orders.add(order);
+    }
+    public void setFavorites(List<Restaurant> favorites) {
+        this.favorites = favorites;
+    }
+    public List<Restaurant> getFavorites() {
+        return favorites;
     }
 
-    public Profile getProfile() {
-        return profile;
+    // Helper methods for managing favorites
+    public void addFavorite(Restaurant restaurant) {
+        if (!favorites.contains(restaurant)) {
+            favorites.add(restaurant);
+            restaurant.getFavoritedBy().add(this);
+        }
     }
 
-    public void setProfile(Profile profile) {
-        this.profile = profile;
+    public void removeFavorite(Restaurant restaurant) {
+        if (favorites.contains(restaurant)) {
+            favorites.remove(restaurant);
+            restaurant.getFavoritedBy().remove(this);
+        }
     }
-    public User(String username, String password, Date createdAt, Profile profile) {
-        this.id = id;
-        this.username = username;
-        this.password = password;
-        this.createdAt = createdAt;
-        this.profile = profile;
-
+    @Override
+    public String toString() {
+        return "User{id=" + id + ", phone=" + phone + ", fullName=" + fullName + "}";
     }
-    public User() {}
 }
