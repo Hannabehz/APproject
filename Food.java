@@ -1,24 +1,22 @@
-package Entity;
-import jakarta.persistence.*;
+package entity;
+import javax.persistence.*;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.UUID;
 
 @Entity
 @Table(name="foods")
 public class Food {
     @Id
-    @GeneratedValue(strategy=GenerationType.IDENTITY)
-    private int id;
+    private UUID id = UUID.randomUUID();
     private String name;
     private double price;
     private int quantity;
-    private int rate;
+    private String category;
     @ManyToOne
     @JoinColumn(name="restaurant_id")
     private Restaurant restaurant;
-    @OneToMany(mappedBy="food",cascade=CascadeType.ALL)
-    private List<Comment> comments=new ArrayList<>();
     public Food(){}
     public Food(String name, double price, int quantity, Restaurant restaurant) {
         this.name = name;
@@ -26,10 +24,10 @@ public class Food {
         this.quantity = quantity;
         this.restaurant = restaurant;
     }
-    public int getId() {
+    public UUID getId() {
         return id;
     }
-    public void setId(int id) {
+    public void setId(UUID id) {
         this.id = id;
     }
     public String getName() {
@@ -56,16 +54,10 @@ public class Food {
     public void setRestaurant(Restaurant restaurant) {
         this.restaurant = restaurant;
     }
-    public List<Comment> getComments() {
-        return comments;
+    public String getCategory() {
+        return category;
     }
-    public void setComments(List<Comment> comments) {
-        this.comments = comments;
-    }
-    public int getRate() {
-        return rate;
-    }
-    public void setRate(int rate) {
-        this.rate = rate;
+    public void setCategory(String category) {
+        this.category = category;
     }
 }

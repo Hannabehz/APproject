@@ -1,13 +1,12 @@
-package Entity;
-import jakarta.persistence.CascadeType;
-import jakarta.persistence.*;
+package entity;
+import javax.persistence.*;
+import java.util.UUID;
 
 @Entity
 @Table(name="order_items")
 public class OrderItem {
     @Id
-    @GeneratedValue(strategy=GenerationType.IDENTITY)
-    private int id;
+    private UUID id = UUID.randomUUID();
     @ManyToOne
     @JoinColumn(name="order_id")
     private Order order;
@@ -16,20 +15,22 @@ public class OrderItem {
     private Food food;
     private int orderedItemQuantity;
     private int unitPrice;
+    private int quantity;
     @ManyToOne
     @JoinColumn(name="restaurant_id")
     private Restaurant restaurant;
     public OrderItem() {}
-    public OrderItem(Order order, Food food, int orderedItemQuantity, int unitPrice, Restaurant restaurant) {
+    public OrderItem(Order order, Food food, int orderedItemQuantity, int unitPrice, Restaurant restaurant,int quantity) {
         this.order = order;
         this.food = food;
         this.orderedItemQuantity = orderedItemQuantity;
         this.unitPrice = unitPrice;
+        this.quantity = quantity;
     }
-    public int getId() {
+    public UUID getId() {
         return id;
     }
-    public void setId(int id) {
+    public void setId(UUID id) {
         this.id = id;
     }
     public Order getOrder() {
@@ -61,5 +62,11 @@ public class OrderItem {
     }
     public void setRestaurant(Restaurant restaurant) {
         this.restaurant = restaurant;
+    }
+    public int getQuantity() {
+        return quantity;
+    }
+    public void setQuantity(int quantity) {
+        this.quantity = quantity;
     }
 }

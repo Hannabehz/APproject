@@ -1,47 +1,46 @@
-package Entity;
+package entity;
 
-import jakarta.persistence.*;
+import javax.persistence.*;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.UUID;
+
+
+
 @Entity
-@Table(name="shoppingCarts")
+@Table(name="shopping_carts")
 public class ShoppingCart {
     @Id
-    @GeneratedValue(strategy= GenerationType.IDENTITY)
-    private Long id;
-    @ManyToOne
-    @JoinColumn(name="user_id")
-    private User customer;
-    @OneToMany(mappedBy = "shoppingCart",cascade = CascadeType.ALL)
-    private List<OrderItem> orderItems=new ArrayList<OrderItem>();
+    private UUID id = UUID.randomUUID();
+
+    @OneToOne
+    @JoinColumn(name = "user_id", nullable = false)
+    private User user;
+
+    @OneToMany(cascade = CascadeType.ALL, orphanRemoval = true)
+    @JoinTable(
+            name = "shopping_carts_order_items",
+            joinColumns = @JoinColumn(name = "shopping_cart_id"),
+            inverseJoinColumns = @JoinColumn(name = "order_item_id")
+    )
+    private List<OrderItem> orderItems = new ArrayList<>();
+
     private int totalPrice;
+
     public ShoppingCart() {}
-    public ShoppingCart(User customer, Restaurant restaurant, DeliveryMan deliveryMan) {
-        this.customer = customer;
+
+    public ShoppingCart(User user) {
+
     }
-    public Long getId() {
-        return id;
-    }
-    public void setId(Long id) {
-        this.id = id;
-    }
-    public User getCustomer() {
-        return customer;
-    }
-    public void setCustomer(User customer) {
-        this.customer = customer;
-    }
-    public List<OrderItem> getOrderItems() {
-        return orderItems;
-    }
-    public void setOrderItems(List<OrderItem> orderItems) {
-        this.orderItems = orderItems;
-    }
-    public int getTotalPrice() {
-        return totalPrice;
-    }
-    public void setTotalPrice(int totalPrice) {
-        this.totalPrice = totalPrice;
-    }
+
+    public UUID getId() { return id; }
+    public void setId(UUID id) { this.id = id; }
+
+    public List<OrderItem> getOrderItems() { return orderItems; }
+    public void setOrderItems(List<OrderItem> orderItems) { this.orderItems = orderItems; }
+
+    public int getTotalPrice() { return totalPrice; }
+    public void setTotalPrice(int totalPrice) { this.totalPrice = totalPrice; }
+
 }

@@ -1,14 +1,8 @@
-package Entity;
-import jakarta.persistence.*;
-
-import java.util.ArrayList;
-
+package entity;
+import javax.persistence.Entity;
+import javax.persistence.DiscriminatorValue;
 @Entity
-@DiscriminatorValue("SELLER")
+@DiscriminatorValue("Courier")
 public class Seller extends User{
-    ArrayList<Restaurant> sellerRestaurants;
-    public Seller() {
-        super();
-        this.sellerRestaurants = new ArrayList<Restaurant>();
-    }
+    //methods and fields related to seller and restaurant
 }
