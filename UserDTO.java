@@ -1,13 +1,30 @@
 package dto;
 
+import com.google.gson.annotations.SerializedName;
+
 public class UserDTO {
+    @SerializedName("fullName")
     private String fullName;
+
+    @SerializedName("phone")
     private String phone;
+
+    @SerializedName("email")
     private String email;
+
+    @SerializedName("password")
     private String password;
+
+    @SerializedName("role")
     private String role;
+
+    @SerializedName("address")
     private String address;
+
+    @SerializedName("profileImageBase64")
     private String profileImageBase64;
+
+    @SerializedName("bankInfo")
     private BankInfoDTO bankInfo;
 
     public String getFullName() { return fullName; }

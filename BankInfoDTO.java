@@ -1,7 +1,12 @@
 package dto;
 
+import com.google.gson.annotations.SerializedName;
+
 public class BankInfoDTO {
+    @SerializedName("bankName")
     private String bankName;
+
+    @SerializedName("accountNumber")
     private String accountNumber;
 
     public String getBankName() { return bankName; }
