@@ -1,49 +1,62 @@
-package Entity;
-import jakarta.persistence.*;
+package entity;
+import javax.persistence.*;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.UUID;
 
 
 @Entity
 @Table(name="orders")
 public class Order {
     @Id
-    @GeneratedValue(strategy=GenerationType.IDENTITY)
-    private Long id;
+    private UUID id = UUID.randomUUID();
     @ManyToOne
-    @JoinColumn(name="user_id")
-    private User customer;
+    @JoinColumn(name = "user_id", nullable = false)
+    private User user;
     @ManyToOne
     @JoinColumn(name="deliveryMan_id")
-    private DeliveryMan deliveryMan;
+    private Courier deliveryMan;
+    @Column(name = "vendor_id")
+    private UUID vendorId;
+    @ManyToOne
+    @JoinColumn(name = "restaurant_id", nullable = false)
+    private Restaurant restaurant;
     private LocalDateTime orderedDateTime;
+    private String deliveryAddress;
     @OneToMany(mappedBy = "order",cascade = CascadeType.ALL)
     private List<OrderItem> orderItems=new ArrayList<OrderItem>();
     private int totalPrice;
-    public Order() {}
-    public Order(User customer, Restaurant restaurant, DeliveryMan deliveryMan) {
-        this.customer = customer;
+    @Column(nullable = false)
+    private String status;
+    public Order() {
+        status="Pending";
+    }
+    public Order(User customer, Restaurant restaurant, Courier deliveryMan,String deliveryAddress) {
+        this.user = customer;
         this.deliveryMan = deliveryMan;
         this.orderedDateTime = LocalDateTime.now();
+        this.deliveryAddress = deliveryAddress;
+        this.restaurant = restaurant;
+        status="Pending";
     }
-    public Long getId() {
+    public UUID getId() {
         return id;
     }
-    public void setId(Long id) {
+    public void setId(UUID id) {
         this.id = id;
     }
     public User getCustomer() {
-        return customer;
+        return user;
     }
     public void setCustomer(User customer) {
-        this.customer = customer;
+        this.user = customer;
     }
-    public DeliveryMan getDeliveryMan() {
+    public Courier getDeliveryMan() {
         return deliveryMan;
     }
-    public void setDeliveryMan(DeliveryMan deliveryMan) {
+    public void setDeliveryMan(Courier deliveryMan) {
         this.deliveryMan = deliveryMan;
     }
     public LocalDateTime getOrderedDateTime() {
@@ -63,5 +76,34 @@ public class Order {
     }
     public void setTotalPrice(int totalPrice) {
         this.totalPrice = totalPrice;
+    }
+
+    public void setDeliveryAddress(String deliveryAddress) {
+        this.deliveryAddress = deliveryAddress.trim();
+    }
+
+    public void setRestaurant(Restaurant restaurant) {
+        this.restaurant = restaurant;
+    }
+
+
+    public String getDeliveryAddress() {
+        return deliveryAddress;
+    }
+
+    public Restaurant getRestaurant() {
+        return restaurant;
+    }
+    public String getStatus() {
+        return status;
+    }
+    public void setStatus(String status) {
+        this.status = status;
+    }
+    public UUID getVendorId() {
+        return vendorId;
+    }
+    public void setVendorId(UUID vendorId) {
+        this.vendorId = vendorId;
     }
 }
