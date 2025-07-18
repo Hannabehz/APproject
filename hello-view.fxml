@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<?import javafx.scene.control.*?>
+<?import javafx.scene.layout.*?>
+<?import javafx.geometry.Insets?>
+
+<VBox alignment="CENTER" spacing="10" xmlns="http://javafx.com/javafx/17" xmlns:fx="http://javafx.com/fxml/1">
+  <padding>
+    <Insets top="20" right="20" bottom="20" left="20"/>
+  </padding>
+  <Label text="فرم غذا" style="-fx-font-size: 20px; -fx-text-fill: white;"/>
+  <TextField fx:id="field1" promptText="نام غذا" style="-fx-background-color: #D3D3D3;"/>
+  <TextField fx:id="field2" promptText="قیمت" style="-fx-background-color: #D3D3D3;"/>
+  <TextField fx:id="field3" promptText="تعداد" style="-fx-background-color: #D3D3D3;"/>
+</VBox>

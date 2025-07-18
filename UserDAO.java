@@ -5,6 +5,8 @@ import org.hibernate.Session;
 import org.hibernate.SessionFactory;
 import org.hibernate.query.Query;
 import util.HibernateUtil;
+import util.JwtUtil;
+
 import java.util.Optional;
 import java.util.UUID;
 
@@ -46,6 +48,9 @@ public class UserDAO {
         }
     }
     public void update(User user) {
+        if (user.getPassword() == null) {
+            throw new IllegalArgumentException("Password cannot be null");
+        }
         try (Session session = sessionFactory.openSession()) {
             session.beginTransaction();
             session.update(user);
@@ -72,8 +77,23 @@ public class UserDAO {
         }
     }
     public Optional<User> findById(UUID id) {
+        System.out.println("Searching for user with id: " + id);
         try (Session session = sessionFactory.openSession()) {
-            return Optional.ofNullable(session.get(User.class, id));
+            User user = session.get(User.class, id);
+            return user != null ? Optional.of(user) : Optional.empty();
+        }
+    }
+    public User findUserByToken(String token) {
+        try (Session session = sessionFactory.openSession()) {
+            String userId = JwtUtil.validateToken(token);
+            if (userId == null) {
+                return null;
+            }
+            return session.createQuery("FROM User WHERE id = :userId", User.class)
+                    .setParameter("userId", UUID.fromString(userId))
+                    .uniqueResult();
+        } catch (Exception e) {
+            throw new RuntimeException("Failed to find user by token: " + e.getMessage());
         }
     }
 }
