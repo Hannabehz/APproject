@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<?import javafx.scene.control.MenuButton?>
+<?import javafx.scene.control.MenuItem?>
+<?import javafx.scene.layout.HBox?>
+<?import javafx.scene.layout.VBox?>
+<?import javafx.scene.text.Font?>
+
+<VBox alignment="TOP_RIGHT" maxHeight="-Infinity" maxWidth="-Infinity" minHeight="-Infinity" minWidth="-Infinity" prefHeight="400.0" prefWidth="600.0" xmlns="http://javafx.com/javafx/24.0.1" xmlns:fx="http://javafx.com/fxml/1" fx:controller="controller.MainViewController">
+    <children>
+        <HBox id="toolBar" alignment="TOP_RIGHT" prefHeight="100.0" prefWidth="200.0" style="-fx-pref-height: 70; -fx-background-color: green;">
+            <children>
+                <MenuButton contentDisplay="RIGHT" mnemonicParsing="false" prefHeight="66.0" prefWidth="43.0" style="-fx-background-color: green;" text="☰" textFill="#faf5f5" wrapText="true">
+                    <items>
+                        <MenuItem fx:id="showProfileItem" mnemonicParsing="false" onAction="#showProfile" text="نمایش پروفایل" />
+                        <MenuItem fx:id="logOutButton" mnemonicParsing="false" onAction="#logOut" text="خروج از حساب کاربری" />
+                    </items>
+                    <font>
+                        <Font size="10.0" />
+                    </font>
+                </MenuButton>
+            </children>
+        </HBox>
+    </children>
+</VBox>

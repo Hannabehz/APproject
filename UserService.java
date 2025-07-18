@@ -1,221 +1,188 @@
 package service;
 
-import entity.BankInfo;
-import entity.User;
-import DAO.UserDAO;
-import dto.*;
-import io.jsonwebtoken.JwtException;
-import org.mindrot.jbcrypt.BCrypt;
-import util.JwtUtil;
-
-import java.util.Optional;
-import java.util.UUID;
+import com.google.gson.Gson;
+import com.google.gson.reflect.TypeToken;
+import model.UserDTO;
+import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.concurrent.CompletableFuture;
 
 public class UserService {
-    private final UserDAO userDAO;
+    private static final String BASE_URL = "http://localhost:8080";
+    private final Gson gson = new Gson();
+    private String token;
 
-    public UserService(UserDAO userDAO) {
-        this.userDAO = userDAO;
+    public CompletableFuture<Map<String, Object>> signUp(UserDTO user) {
+        HttpClient client = HttpClient.newHttpClient();
+        String json = new Gson().toJson(user);
+        System.out.println("JSON sent: " + json);
+        HttpRequest request = HttpRequest.newBuilder()
+                .uri(URI.create(BASE_URL + "/auth/register"))
+                .header("Content-Type", "application/json")
+                .POST(HttpRequest.BodyPublishers.ofString(json))
+                .build();
+
+        return client.sendAsync(request, HttpResponse.BodyHandlers.ofString())
+                .thenApply(HttpResponse::body)
+                .thenApply(response -> gson.fromJson(response, new TypeToken<Map<String, Object>>(){}.getType()));
+
     }
 
-
-    public ServiceResult save(UserDTO userDTO) {
-        if (userDTO.getFullName() == null || userDTO.getPhone() == null ||
-                userDTO.getPassword() == null || userDTO.getRole() == null ||
-                userDTO.getAddress() == null) {
-            return new ServiceResult(400, "Required fields are missing");
+    public CompletableFuture<Map<String, Object>> login(String phone, String password) {
+        if (phone == null || phone.trim().isEmpty() || password == null || password.trim().isEmpty()) {
+            return CompletableFuture.completedFuture(Map.of(
+                    "status", 400,
+                    "message", "Phone and password are required"
+            ));
         }
 
+        HttpClient client = HttpClient.newHttpClient();
+        Map<String, String> requestBody = new HashMap<>();
+        requestBody.put("phone", phone);
+        requestBody.put("password", password);
+        String json = gson.toJson(requestBody);
+        HttpRequest request = HttpRequest.newBuilder()
+                .uri(URI.create(BASE_URL + "/auth/login"))
+                .header("Content-Type", "application/json")
+                .POST(HttpRequest.BodyPublishers.ofString(json))
+                .build();
 
-        if (!userDTO.getRole().matches("buyer|seller|courier")) {
-            return new ServiceResult(400, "Invalid role");
-        }
+        return client.sendAsync(request, HttpResponse.BodyHandlers.ofString())
+                .thenApply(response -> {
+                    String body = response.body();
+                    Map<String, Object> result = gson.fromJson(body, new TypeToken<Map<String, Object>>(){}.getType());
 
-
-        if (userDTO.getBankInfo() != null &&
-                (userDTO.getBankInfo().getBankName() == null ||
-                        userDTO.getBankInfo().getAccountNumber() == null)) {
-            return new ServiceResult(400, "Bank info incomplete");
-        }
-
-
-        if (userDTO.getEmail() != null &&
-                !userDTO.getEmail().matches("^[\\w-\\.]+@([\\w-]+\\.)+[\\w-]{2,4}$")) {
-            return new ServiceResult(400, "Invalid email format");
-        }
-
-
-        if (userDAO.isPhoneTaken(userDTO.getPhone())) {
-            return new ServiceResult(409, "Phone number already exists");
-        }
-
-        User user = new User();
-        user.setId(UUID.randomUUID());
-        user.setFullName(userDTO.getFullName());
-        user.setPhone(userDTO.getPhone());
-        user.setEmail(userDTO.getEmail());
-        user.setPassword(BCrypt.hashpw(userDTO.getPassword(), BCrypt.gensalt()));
-        user.setRole(userDTO.getRole());
-        user.setAddress(userDTO.getAddress());
-        user.setProfileImageBase64(userDTO.getProfileImageBase64());
-
-        if (userDTO.getBankInfo() != null) {
-            BankInfo bankInfo = new BankInfo();
-            bankInfo.setBankName(userDTO.getBankInfo().getBankName());
-            bankInfo.setAccountNumber(userDTO.getBankInfo().getAccountNumber());
-            user.setBankInfo(bankInfo);
-        }
-
-        // Save user
-        try {
-            userDAO.save(user);
-            String token = JwtUtil.generateToken(user.getId().toString());
-            return new RegistrationResult(200, "User registered successfully", user.getId().toString(), token);
-        } catch (Exception e) {
-            return new ServiceResult(500, "Internal server Error: " + e.getMessage());
-        }
+                    if (response.statusCode() == 200) {
+                        // استخراج مقادیر از LoginResult
+                        Map<String, Object> loginResult = new HashMap<>();
+                        loginResult.put("status", response.statusCode());
+                        loginResult.put("message", result.getOrDefault("message", "Login successful"));
+                        loginResult.put("token", result.getOrDefault("token", ""));
+                        loginResult.put("user", result.getOrDefault("user", new HashMap<>()));
+                        token = "Bearer " + (String) loginResult.get("token"); // ذخیره توکن
+                        return loginResult;
+                    } else {
+                        return Map.of(
+                                "status", response.statusCode(),
+                                "message", result.getOrDefault("message", "incorrect password or phone number")
+                        );
+                    }
+                })
+                .exceptionally(throwable -> {
+                    System.err.println("Login error: " + throwable.getMessage());
+                    return Map.of(
+                            "status", 500,
+                            "message", "Internal server error: " + throwable.getMessage()
+                    );
+                });
     }
+    public CompletableFuture<Map<String, Object>> getProfile(String token) {
+        System.out.println("Sending token to /auth/profile: " + token); // لاگ توکن
+        HttpClient client = HttpClient.newHttpClient();
+        String authHeader = token.startsWith("Bearer ") ? token : "Bearer " + token;
 
-    public ServiceResult login(String phone, String password) {
+        HttpRequest request = HttpRequest.newBuilder()
+                .uri(URI.create(BASE_URL + "/auth/profile"))
+                .header("Authorization", authHeader)
+                .header("Content-Type", "application/json")
+                .GET()
+                .build();
 
-        if (phone == null || password == null) {
-            return new ServiceResult(400, "Phone and password are required");
-        }
+        return client.sendAsync(request, HttpResponse.BodyHandlers.ofString())
+                .thenApply(response -> {
+                    String body = response.body();
+                    System.out.println("Raw response from /auth/profile: " + body); // لاگ پاسخ خام
+                    Map<String, Object> result = gson.fromJson(body, new TypeToken<Map<String, Object>>(){}.getType());
 
-        Optional<User> userOptional = userDAO.findByPhone(phone);
-        if (!userOptional.isPresent()) {
-            return new ServiceResult(401, "Unauthorized: Invalid phone or password");
-        }
-
-        User user = userOptional.get();
-
-        UserDTO userDTO = new UserDTO();
-        userDTO.setFullName(user.getFullName());
-        userDTO.setPhone(user.getPhone());
-        userDTO.setEmail(user.getEmail());
-        userDTO.setRole(user.getRole());
-        userDTO.setAddress(user.getAddress());
-        userDTO.setProfileImageBase64(user.getProfileImageBase64());
-        if (user.getBankInfo() != null) {
-            BankInfoDTO bankInfoDTO = new BankInfoDTO();
-            bankInfoDTO.setBankName(user.getBankInfo().getBankName());
-            bankInfoDTO.setAccountNumber(user.getBankInfo().getAccountNumber());
-            userDTO.setBankInfo(bankInfoDTO);
-        }
-        String token = JwtUtil.generateToken(user.getId().toString());
-        return new LoginResult(200, "User logged in successfully", token, userDTO);
+                    // بررسی کد وضعیت HTTP
+                    if (response.statusCode() == 200) {
+                        // پاسخ از نوع ProfileResult است، شامل user
+                        Map<String, Object> profileResult = new HashMap<>();
+                        profileResult.put("status", 200); // اضافه کردن status به صورت دستی
+                        profileResult.put("user", result); // کل پاسخ به عنوان user
+                        return profileResult;
+                    } else {
+                        // پاسخ از نوع ServiceResult است
+                        return Map.of(
+                                "status", response.statusCode(),
+                                "message", result.getOrDefault("message", "Profile fetch failed")
+                        );
+                    }
+                })
+                .exceptionally(throwable -> {
+                    System.err.println("Profile fetch error: " + throwable.getMessage());
+                    return Map.of(
+                            "status", 500,
+                            "message", "Internal server error: " + throwable.getMessage()
+                    );
+                });
     }
+    public CompletableFuture<Map<String, Object>> updateProfile(String token, Map<String, Object> profileData) {
+        HttpClient client = HttpClient.newHttpClient();
+        String json = new Gson().toJson(profileData);
+        String authHeader = token.startsWith("Bearer ") ? token : "Bearer " + token;
 
-    public ServiceResult logout(String token) {
-        try {
-            String userId = JwtUtil.validateToken(token);
-            if (userId == null) {
-                return new ServiceResult(401, "Unauthorized: Invalid or expired token");
-            }
-            return new ServiceResult(200, "User logged out successfully");
-        } catch (JwtException e) {
-            return new ServiceResult(401, "Unauthorized: " + e.getMessage());
-        }
+        HttpRequest request = HttpRequest.newBuilder()
+                .uri(URI.create(BASE_URL + "/auth/profile"))
+                .header("Authorization", authHeader)
+                .header("Content-Type", "application/json")
+                .PUT(HttpRequest.BodyPublishers.ofString(json))
+                .build();
+
+        return client.sendAsync(request, HttpResponse.BodyHandlers.ofString())
+                .thenApply(response -> {
+                    String body = response.body();
+                    Map<String, Object> result = gson.fromJson(body, new TypeToken<Map<String, Object>>(){}.getType());
+                    if (response.statusCode() == 200) {
+                        // پاسخ از نوع ProfileResult است
+                        Map<String, Object> profileResult = new HashMap<>();
+                        profileResult.put("status", 200);
+                        profileResult.put("user", result); // کل پاسخ به عنوان user
+                        return profileResult;
+                    } else {
+                        // پاسخ از نوع ServiceResult است
+                        return Map.of(
+                                "status", response.statusCode(),
+                                "message", result.getOrDefault("message", "Profile update failed")
+                        );
+                    }
+                })
+                .exceptionally(throwable -> Map.of(
+                        "status", 500,
+                        "message", "Internal server error: " + throwable.getMessage()
+                ));
     }
+    public CompletableFuture<Map<String, Object>> logOut(String token) {
+        HttpClient client = HttpClient.newHttpClient();
+        String authHeader = token.startsWith("Bearer ") ? token : "Bearer " + token;
 
-    public ServiceResult getProfile(String token) {
-        try {
-            String userId = JwtUtil.validateToken(token);
-            if (userId == null) {
-                return new ServiceResult(401, "Unauthorized: Invalid or expired token");
-            }
+        HttpRequest request = HttpRequest.newBuilder()
+                .uri(URI.create(BASE_URL + "/auth/logout"))
+                .header("Authorization", authHeader)
+                .header("Content-Type", "application/json")
+                .GET()
+                .build();
+        return client.sendAsync(request, HttpResponse.BodyHandlers.ofString())
+                .thenApply(response -> {
+                    System.out.println("Raw response from /auth/logout: " + response.body());
+                    Map<String, Object> result = gson.fromJson(response.body(), new TypeToken<Map<String, Object>>(){}.getType());
+                    result.put("status", response.statusCode());
+                    return result;
+                })
+                .exceptionally(throwable -> {
+                    System.err.println("Logout error: " + throwable.getMessage());
+                    return Map.of("status", 500, "message", "خطا در ارتباط با سرور: " + throwable.getMessage());
+                });
 
-            Optional<User> userOptional = userDAO.findById(UUID.fromString(userId));
-            if (userOptional.isEmpty()) {
-                return new ServiceResult(401, "Unauthorized: User not found");
-            }
-
-            User user = userOptional.get();
-            UserDTO userDTO = new UserDTO();
-            userDTO.setFullName(user.getFullName());
-            userDTO.setPhone(user.getPhone());
-            userDTO.setEmail(user.getEmail());
-            userDTO.setRole(user.getRole());
-            userDTO.setAddress(user.getAddress());
-            userDTO.setProfileImageBase64(user.getProfileImageBase64());
-            if (user.getBankInfo() != null) {
-                BankInfoDTO bankInfoDTO = new BankInfoDTO();
-                bankInfoDTO.setBankName(user.getBankInfo().getBankName());
-                bankInfoDTO.setAccountNumber(user.getBankInfo().getAccountNumber());
-                userDTO.setBankInfo(bankInfoDTO);
-            }
-            return new ProfileResult(200, userDTO);
-        } catch (JwtException e) {
-            return new ServiceResult(401, "Unauthorized: " + e.getMessage());
-        } catch (Exception e) {
-            return new ServiceResult(500, "Internal server error: " + e.getMessage());
-        }
     }
-
-    public ServiceResult updateProfile(String token, UserDTO userDTO) {
-        // Validate JWT token
-        try {
-
-            String userId = JwtUtil.validateToken(token);
-            Optional<User> userOptional = userDAO.findById(UUID.fromString(userId));
-            if (userId == null) {
-                return new ServiceResult(401, "Unauthorized: Invalid or expired token");
-            }
-            if (userOptional.isEmpty()) {
-                return new ServiceResult(401, "Unauthorized: User not found");
-            }
-
-            if (userDTO.getFullName() == null || userDTO.getPhone() == null ||
-                    userDTO.getRole() == null || userDTO.getAddress() == null) {
-                return new ServiceResult(400, "Invalid input: Required fields are missing");
-            }
-
-            if (!userDTO.getRole().matches("buyer|seller|courier")) {
-                return new ServiceResult(400, "Invalid input: Invalid role");
-            }
-
-            if (userDTO.getBankInfo() != null &&
-                    (userDTO.getBankInfo().getBankName() == null ||
-                            userDTO.getBankInfo().getAccountNumber() == null)) {
-                return new ServiceResult(400, "Invalid input: Bank info incomplete");
-            }
-
-            if (userDTO.getEmail() != null &&
-                    !userDTO.getEmail().matches("^[\\w-\\.]+@([\\w-]+\\.)+[\\w-]{2,4}$")) {
-                return new ServiceResult(400, "Invalid input: Invalid email format");
-            }
-
-            Optional<User> existingUser = userDAO.findByPhone(userDTO.getPhone());
-            if (existingUser.isPresent() && !existingUser.get().getId().equals(userId)) {
-                return new ServiceResult(400, "Invalid input: Phone number already exists");
-            }
-
-            // Update user
-            User user = userOptional.get();
-            user.setFullName(userDTO.getFullName());
-            user.setPhone(userDTO.getPhone());
-            user.setEmail(userDTO.getEmail());
-            user.setRole(userDTO.getRole());
-            user.setAddress(userDTO.getAddress());
-            user.setProfileImageBase64(userDTO.getProfileImageBase64());
-
-            if (userDTO.getBankInfo() != null) {
-                BankInfo bankInfo = new BankInfo();
-                bankInfo.setBankName(userDTO.getBankInfo().getBankName());
-                bankInfo.setAccountNumber(userDTO.getBankInfo().getAccountNumber());
-                user.setBankInfo(bankInfo);
-            } else {
-                user.setBankInfo(null);
-            }
-
-            userDAO.update(user);
-
-            return new ProfileResult(200, userDTO);
-
-        } catch (JwtException e) {
-            return new ServiceResult(401, "Unauthorized: " + e.getMessage());
-        } catch (Exception e) {
-            return new ServiceResult(500, "Internal server error: " + e.getMessage());
-        }
+    public String getToken() {
+        return token;
+    }
+    public void setToken(String token) {
+        this.token = token;
     }
 }
