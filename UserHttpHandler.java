@@ -5,10 +5,8 @@ import com.google.gson.Gson;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpHandler;
 import dto.*;
-import org.hibernate.SessionFactory;
-import org.hibernate.cfg.Configuration;
 import service.UserService;
-import util.HibernateUtil;
+
 
 
 import java.io.BufferedReader;
@@ -16,6 +14,7 @@ import java.io.IOException;
 import java.io.InputStreamReader;
 import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
+import java.util.Map;
 
 public class UserHttpHandler implements HttpHandler {
     private final UserService userService;
@@ -51,7 +50,7 @@ public class UserHttpHandler implements HttpHandler {
     private void handleLogout(HttpExchange exchange) throws IOException {
         try {
             String authHeader = exchange.getRequestHeaders().getFirst("Authorization");
-            if (authHeader == null || !authHeader.startsWith("Bearer")) {
+            if (authHeader == null || !authHeader.startsWith("Bearer ")) {
                 sendErrorResponse(exchange, 401, "Unauthorized: Missing or invalid token");
                 return;
             }
@@ -211,17 +210,21 @@ private static class LoginRequest {
                 return;
             }
 
-            ServiceResult result = userService.getProfile(authHeader);
+            String token = authHeader.substring(7); // حذف "Bearer "
+            ServiceResult result = userService.getProfile(token);
             exchange.getResponseHeaders().set("Content-Type", "application/json");
-
+            String response;
             if (result instanceof ProfileResult) {
                 ProfileResult success = (ProfileResult) result;
-                String response = gson.toJson(success.getUser());
-                sendResponse(exchange, success.getStatus(), response);
+                response = gson.toJson(success.getUser());
             } else {
-                String response = gson.toJson(new ErrorResponse(result.getMessage()));
-                sendResponse(exchange, result.getStatus(), response);
+                // مطمئن شو که پیام سفارشی برگرده
+                response = gson.toJson(Map.of(
+                        "status", result.getStatus(),
+                        "message", result.getMessage()
+                ));
             }
+            sendResponse(exchange, result.getStatus(), response);
         } catch (Exception e) {
             sendErrorResponse(exchange, 500, "Internal server error: " + e.getMessage());
         }

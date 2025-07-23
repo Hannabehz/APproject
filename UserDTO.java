@@ -1,4 +1,4 @@
-package model;
+package dto;
 
 import com.google.gson.annotations.SerializedName;
 
@@ -27,18 +27,6 @@ public class UserDTO {
     @SerializedName("bankInfo")
     private BankInfoDTO bankInfo;
 
-    public UserDTO(String fullName, String phone, String password, String role, String address, String email, String bankName, String accountNumber) {
-        this.fullName = fullName;
-        this.phone = phone;
-        this.password = password;
-        this.role = role;
-        this.address = address;
-        this.email = email;
-        if (bankName != null && !bankName.trim().isEmpty() && accountNumber != null && !accountNumber.trim().isEmpty()) {
-            this.bankInfo = new BankInfoDTO(bankName, accountNumber);
-        }
-    }
-    public UserDTO() {}
     public String getFullName() { return fullName; }
     public void setFullName(String fullName) { this.fullName = fullName; }
     public String getPhone() { return phone; }
@@ -55,4 +43,15 @@ public class UserDTO {
     public void setProfileImageBase64(String profileImageBase64) { this.profileImageBase64 = profileImageBase64; }
     public BankInfoDTO getBankInfo() { return bankInfo; }
     public void setBankInfo(BankInfoDTO bankInfo) { this.bankInfo = bankInfo; }
+    public UserDTO(String fullName, String phone, String email, String password, String role, String address, String profileImageBase64) {
+        this.fullName = fullName;
+        this.phone = phone;
+        this.email = email;
+        this.password = password;
+        this.role = role;
+        this.address = address;
+        this.profileImageBase64 = profileImageBase64;
+
+    }
+    public UserDTO(){}
 }

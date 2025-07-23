@@ -7,9 +7,11 @@ import org.hibernate.Session;
 import org.hibernate.query.Query;
 import util.HibernateUtil;
 
+import javax.persistence.criteria.*;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
-
+import java.util.ArrayList;
 public class OrderDAO {
 
     public Order saveOrder(Order order) {
@@ -25,7 +27,57 @@ public class OrderDAO {
             throw new RuntimeException("Failed to save order: " + e.getMessage());
         }
     }
+    public List<Order> getOrdersByRestaurant(UUID restaurantId, String status, String searchCustomerName, UUID userId, UUID courierId) {
+        try (Session session = HibernateUtil.getSessionFactory().openSession()) {
+            CriteriaBuilder cb = session.getCriteriaBuilder();
+            CriteriaQuery<Order> cq = cb.createQuery(Order.class);
+            Root<Order> root = cq.from(Order.class);
 
+            List<Predicate> preds = new ArrayList<>();
+
+
+            preds.add(cb.equal(root.get("restaurant").get("id"), restaurantId));
+
+            if (status != null && !status.isBlank()) {
+                preds.add(cb.equal(
+                        cb.lower(root.get("status")),
+                        status.toLowerCase()
+                ));
+            }
+
+            if (searchCustomerName != null && !searchCustomerName.isBlank()) {
+                Join<Order, User> userJoin = root.join("user", JoinType.INNER);
+                preds.add(cb.like(
+                        cb.lower(userJoin.get("name")),
+                        "%" + searchCustomerName.toLowerCase() + "%"
+                ));
+            }
+            if (userId != null) {
+                preds.add(cb.equal(root.get("user").get("id"), userId));
+            }
+            if (courierId != null) {
+                preds.add(cb.equal(root.get("deliveryMan").get("id"), courierId));
+            }
+
+            cq.where(cb.and(preds.toArray(new Predicate[0])));
+            cq.orderBy(cb.desc(root.get("orderedDateTime")));
+
+            return session.createQuery(cq).getResultList();
+        }
+    }
+    public void update(Order order) {
+        try (Session session = HibernateUtil.getSessionFactory().openSession()) {
+            session.beginTransaction();
+            session.merge(order);
+            session.getTransaction().commit();
+        }
+    }
+
+    public Optional<Order> findById(UUID orderId) {
+        try (Session session = HibernateUtil.getSessionFactory().openSession()) {
+            return Optional.ofNullable(session.get(Order.class, orderId));
+        }
+    }
     public User findUserByToken(String token) {
         try (Session session = HibernateUtil.getSessionFactory().openSession()) {
             String subject = util.JwtUtil.validateToken(token);
@@ -35,14 +87,14 @@ public class OrderDAO {
             throw new RuntimeException("Failed to find user: " + e.getMessage());
         }
     }
-    public List<Order> getOrderHistory(UUID buyerId,String search,String vendor) {
+    public List<Order> getOrderHistory(UUID buyerId, String search, String vendor) {
         try (Session session = HibernateUtil.getSessionFactory().openSession()) {
-            String hql = "FROM Order o WHERE o.user.Id = :buyerId";
+            String hql = "FROM Order o WHERE o.user.id = :buyerId";
             if (search != null && !search.isEmpty()) {
                 hql += " AND (o.deliveryAddress LIKE :search OR o.status LIKE :search)";
             }
             if (vendor != null && !vendor.isEmpty()) {
-                hql += " AND EXISTS (SELECT 1 FROM Vendor v WHERE v.vendorId = o.vendorId AND v.name LIKE :vendor)";
+                hql += " AND EXISTS (SELECT 1 FROM Restaurant r WHERE r.id = o.restaurant.id AND r.name LIKE :vendor)";
             }
             Query<Order> query = session.createQuery(hql, Order.class);
             query.setParameter("buyerId", buyerId);
@@ -57,7 +109,6 @@ public class OrderDAO {
             throw new RuntimeException("Failed to fetch order history", e);
         }
     }
-
     public void addFavorite(UUID userId, UUID restaurantId) {
         try (Session session = HibernateUtil.getSessionFactory().openSession()) {
             session.beginTransaction();

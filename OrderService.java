@@ -1,80 +1,151 @@
 package service;
 
 import DAO.OrderDAO;
+import DAO.ShoppingCartDAO;
+import DAO.UserDAO;
 import dto.*;
+import entity.*;
 import io.jsonwebtoken.JwtException;
 import org.hibernate.Session;
+import org.hibernate.SessionFactory;
 import util.HibernateUtil;
-import java.util.List;
-import java.util.UUID;
+
+import java.time.LocalDateTime;
+import java.util.*;
 import java.util.stream.Collectors;
 
-import entity.Food;
-import entity.Order;
-import entity.OrderItem;
-import entity.Restaurant;
-import entity.User;
 import util.JwtUtil;
 
 
 public class OrderService {
 
-    private final OrderDAO orderDAO = new OrderDAO();
+    private final OrderDAO orderDAO;
+    private final ShoppingCartDAO cartDAO;
+    private final UserDAO userdao;
+    private final SessionFactory sessionFactory;
 
-    public OrderDTO submitOrder(String token, String deliveryAddress, Long vendorId, List<OrderItemDTO> items) {
-        if (deliveryAddress == null || deliveryAddress.trim().isEmpty() || vendorId == null || items == null || items.isEmpty()) {
-            throw new IllegalArgumentException("Invalid order data");
+    public OrderService(OrderDAO orderDAO, ShoppingCartDAO cartDAO, UserDAO userdao, SessionFactory sessionFactory) {
+        this.orderDAO = orderDAO;
+        this.cartDAO = cartDAO;
+        this.userdao = userdao;
+        this.sessionFactory = sessionFactory;
+    }
+
+    public Map<String, Object> submitOrder(String token, String deliveryAddress, String vendorId, List<OrderItemDTO> items) {
+        if (deliveryAddress == null || deliveryAddress.trim().isEmpty() || vendorId == null || vendorId.trim().isEmpty() || items == null || items.isEmpty()) {
+            return new HashMap<>(Map.of("error", "Invalid `delivery_address`, `vendor_id`, or `items`", "status", 400));
         }
 
-        try (Session session = HibernateUtil.getSessionFactory().openSession()) {
+        try (Session session = sessionFactory.openSession()) {
             session.beginTransaction();
 
-
-            User buyer = orderDAO.findUserByToken(token);
+            // پیدا کردن کاربر
+            User buyer = userdao.findUserByToken(token);
             if (buyer == null) {
-                throw new RuntimeException("User not found");
+                return new HashMap<>(Map.of("error", "Unauthorized", "status", 401));
             }
 
+            // پیدا کردن رستوران
+            UUID restaurantUuid;
+            try {
+                restaurantUuid = UUID.fromString(vendorId);
+            } catch (IllegalArgumentException e) {
+                return new HashMap<>(Map.of("error", "Invalid `vendor_id` format", "status", 400));
+            }
 
-            Restaurant restaurant = session.get(Restaurant.class, java.util.UUID.fromString(vendorId.toString()));
+            Restaurant restaurant = session.get(Restaurant.class, restaurantUuid);
             if (restaurant == null) {
-                throw new RuntimeException("Vendor not found");
+                return new HashMap<>(Map.of("error", "Restaurant not found", "status", 400));
             }
+
+            // اعتبارسنجی آیتم‌ها و بررسی موجودی
+            List<OrderItem> orderItems = items.stream().map(itemDTO -> {
+                UUID itemId;
+                try {
+                    itemId = itemDTO.getItemId();
+                } catch (IllegalArgumentException e) {
+                    throw new RuntimeException("Invalid `item_id` format");
+                }
+                Food food = session.get(Food.class, itemId);
+                if (food == null || !food.getRestaurant().getId().equals(restaurant.getId())) {
+                    throw new RuntimeException("Invalid item or item not from restaurant");
+                }
+                if (itemDTO.getQuantity() > food.getSupply()) {
+                    throw new RuntimeException("Requested quantity for item " + food.getName() + " exceeds available supply: " + food.getSupply());
+                }
+                OrderItem orderItem = new OrderItem();
+                orderItem.setQuantity(itemDTO.getQuantity());
+                orderItem.setOrderedItemQuantity(itemDTO.getQuantity());
+                orderItem.setUnitPrice((int) food.getPrice());
+                orderItem.setFood(food);
+                orderItem.setRestaurant(restaurant);
+                // کسر موجودی
+                food.setSupply(food.getSupply() - itemDTO.getQuantity());
+                session.update(food);
+                return orderItem;
+            }).collect(Collectors.toList());
+
+            // محاسبه قیمت‌ها
+            int rawPrice = orderItems.stream()
+                    .mapToInt(item -> item.getQuantity() * item.getUnitPrice())
+                    .sum();
+            int taxFee = (int) (rawPrice * 0.1); // فرض: 10% مالیات
+            int courierFee = 5000; // فرض: هزینه ثابت پیک
+            int payPrice = rawPrice + taxFee + courierFee;
 
             // ایجاد سفارش
             Order order = new Order();
             order.setDeliveryAddress(deliveryAddress);
             order.setCustomer(buyer);
             order.setRestaurant(restaurant);
-
-            // تبدیل آیتم‌ها و اعتبارسنجی
-            List<OrderItem> orderItems = items.stream().map(item -> {
-                Food food = session.get(Food.class, item.getItemId());
-                if (food == null || !food.getRestaurant().getId().equals(restaurant.getId())) {
-                    throw new RuntimeException("Invalid item or item not from vendor");
-                }
-                OrderItem orderItem = new OrderItem();
-                orderItem.setQuantity(item.getQuantity());
-                orderItem.setFood(food);
-                orderItem.setOrder(order);
-                return orderItem;
-            }).collect(Collectors.toList());
-
             order.setOrderItems(orderItems);
+            order.setRawPrice(rawPrice);
+            order.setTaxFee(taxFee);
+            order.setCourierFee(courierFee);
+            order.setPayPrice(payPrice);
+            order.setCourierId(null);
+            order.setStatus("submitted");
+            order.setCreatedAt(LocalDateTime.now());
+            order.setUpdatedAt(LocalDateTime.now());
 
             // ذخیره سفارش
             Order savedOrder = orderDAO.saveOrder(order);
+
+            // خالی کردن سبد خرید
+            Optional<ShoppingCart> cartOptional = cartDAO.findByUserId(buyer.getId());
+            if (cartOptional.isPresent()) {
+                ShoppingCart cart = cartOptional.get();
+                cart.getOrderItems().clear();
+                cart.setTotalPrice(0);
+                cartDAO.saveOrUpdate(cart);
+            }
+
             session.getTransaction().commit();
 
-            return new OrderDTO(
-                    savedOrder.getId(),
-                    savedOrder.getDeliveryAddress(),
-                    savedOrder.getRestaurant().getId(),
-                    items
-            );
+            // آماده‌سازی پاسخ
+            List<String> itemIds = orderItems.stream()
+                    .map(item -> item.getFood().getId().toString())
+                    .collect(Collectors.toList());
+
+            Map<String, Object> response = new HashMap<>();
+            response.put("id", savedOrder.getId().toString());
+            response.put("delivery_address", savedOrder.getDeliveryAddress());
+            response.put("customer_id", savedOrder.getCustomer().getId().toString());
+            response.put("vendor_id", savedOrder.getRestaurant().getId().toString());
+            response.put("item_ids", itemIds);
+            response.put("raw_price", savedOrder.getRawPrice());
+            response.put("tax_fee", savedOrder.getTaxFee());
+            response.put("courier_fee", savedOrder.getCourierFee());
+            response.put("pay_price", savedOrder.getPayPrice());
+            response.put("courier_id", savedOrder.getCourierId() != null ? savedOrder.getCourierId().toString() : null);
+            response.put("status", savedOrder.getStatus());
+            response.put("created_at", savedOrder.getCreatedAt().toString());
+            response.put("updated_at", savedOrder.getUpdatedAt().toString());
+
+            return response;
+
         } catch (Exception e) {
-            System.err.println("Error in submitOrder: " + e.getMessage());
-            throw new RuntimeException("Failed to submit order: " + e.getMessage());
+            return new HashMap<>(Map.of("error", e.getMessage(), "status", 500));
         }
     }
     public List<OrderResponseDTO> getOrderHistory(UUID buyerId, String search, String vendor) {
@@ -86,16 +157,15 @@ public class OrderService {
             OrderResponseDTO responseDTO = new OrderResponseDTO();
             responseDTO.setOrderId(order.getId());
             responseDTO.setBuyerId(order.getCustomer().getId());
-            responseDTO.setVendorId(order.getVendorId());
+            responseDTO.setVendorId(order.getRestaurant().getId());
+            responseDTO.setRestaurantName(order.getRestaurant().getName()); // اضافه کردن نام رستوران
             responseDTO.setDeliveryAddress(order.getDeliveryAddress());
             responseDTO.setStatus(order.getStatus());
+            responseDTO.setDeliveryStatus(order.getDeliveryStatus());
+            responseDTO.setPayPrice(order.getPayPrice()); // فرض بر این است که Order فیلد payPrice دارد
+            responseDTO.setCreatedAt(order.getCreatedAt()); // فرض بر این است که Order فیلد createdAt دارد
             responseDTO.setItems(order.getOrderItems().stream()
-                    .map(item -> {
-                        OrderItemDTO itemDTO = new OrderItemDTO();
-                        itemDTO.setItemId(item.getId());
-                        itemDTO.setQuantity(item.getQuantity());
-                        return itemDTO;
-                    })
+                    .map(item -> new OrderItemDTO(item.getFood().getId(), item.getQuantity()))
                     .collect(Collectors.toList()));
             return responseDTO;
         }).collect(Collectors.toList());

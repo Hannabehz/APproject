@@ -84,16 +84,12 @@ public class UserDAO {
         }
     }
     public User findUserByToken(String token) {
-        try (Session session = sessionFactory.openSession()) {
-            String userId = JwtUtil.validateToken(token);
-            if (userId == null) {
-                return null;
-            }
-            return session.createQuery("FROM User WHERE id = :userId", User.class)
-                    .setParameter("userId", UUID.fromString(userId))
-                    .uniqueResult();
+        try (Session session = HibernateUtil.getSessionFactory().openSession()) {
+            String subject = util.JwtUtil.validateToken(token);
+            return session.get(User.class, java.util.UUID.fromString(subject));
         } catch (Exception e) {
-            throw new RuntimeException("Failed to find user by token: " + e.getMessage());
+            System.err.println("Error in findUserByToken: " + e.getMessage());
+            throw new RuntimeException("Failed to find user: " + e.getMessage());
         }
     }
 }

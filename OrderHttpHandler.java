@@ -1,5 +1,8 @@
 package httpRequestHandler;
 
+import DAO.OrderDAO;
+import DAO.ShoppingCartDAO;
+import DAO.UserDAO;
 import com.google.gson.Gson;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
@@ -9,6 +12,8 @@ import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpHandler;
 import dto.*;
 import io.jsonwebtoken.JwtException;
+import org.hibernate.SessionFactory;
+import org.hibernate.cfg.Configuration;
 import service.OrderService;
 import util.JwtUtil;
 import service.RatingService;
@@ -23,12 +28,21 @@ public class OrderHttpHandler implements HttpHandler {
 
     private final OrderService orderService;
     private final Gson gson = new Gson();
-    private RatingService ratingService;
-    public OrderHttpHandler() {
-        this.orderService = new OrderService();
-        this.ratingService = new RatingService();
-    }
+    private final RatingService ratingService;
 
+    public OrderHttpHandler() {
+        // Initialize SessionFactory
+        SessionFactory sessionFactory = new Configuration().configure().buildSessionFactory();
+
+        // Initialize DAOs and UserService
+        OrderDAO orderDAO = new OrderDAO();
+        ShoppingCartDAO cartDAO = new ShoppingCartDAO(sessionFactory);
+        UserDAO userdao = new UserDAO();
+
+        // Initialize Services
+        this.orderService = new OrderService(orderDAO, cartDAO, userdao, sessionFactory);
+        this.ratingService = new RatingService(); // Adjust if RatingService needs dependencies
+    }
     @Override
     public void handle(HttpExchange exchange) throws IOException {
         String path = exchange.getRequestURI().getPath();
@@ -99,7 +113,7 @@ public class OrderHttpHandler implements HttpHandler {
     private void handleSubmitOrder(HttpExchange exchange) throws IOException {
         String authHeader = exchange.getRequestHeaders().getFirst("Authorization");
         if (!isAuthenticated(authHeader)) {
-            sendResponse(exchange, 401, "Unauthorized");
+            sendResponse(exchange, 401, "{\"error\": \"Unauthorized\"}");
             return;
         }
 
@@ -113,25 +127,31 @@ public class OrderHttpHandler implements HttpHandler {
 
         JsonObject json = new JsonParser().parse(requestBody.toString()).getAsJsonObject();
         String deliveryAddress = json.get("delivery_address").getAsString();
-        Long vendorId = json.get("vendor_id").getAsLong();
+        String vendorId = json.get("vendor_id").getAsString();
         JsonArray itemsArray = json.getAsJsonArray("items");
 
         List<OrderItemDTO> items = new ArrayList<>();
         for (JsonElement itemElement : itemsArray) {
             JsonObject item = itemElement.getAsJsonObject();
-            UUID itemId = UUID.fromString(item.get("item_id").getAsString());
+            String itemIdStr = item.get("item_id").getAsString();
             int quantity = item.get("quantity").getAsInt();
-            items.add(new OrderItemDTO(itemId, quantity));
+            try {
+                UUID itemId = UUID.fromString(itemIdStr);
+                items.add(new OrderItemDTO(itemId, quantity));
+            } catch (IllegalArgumentException e) {
+                sendResponse(exchange, 400, "{\"error\": \"Invalid `item_id` format\"}");
+                return;
+            }
         }
 
         try {
-            OrderDTO order = orderService.submitOrder(authHeader.substring(7), deliveryAddress, vendorId, items);
-            String response = gson.toJson(order);
-            sendResponse(exchange, 200, response);
+            Map<String, Object> orderResponse = orderService.submitOrder(authHeader.substring(7), deliveryAddress, vendorId, items);
+            String response = gson.toJson(orderResponse);
+            sendResponse(exchange, orderResponse.containsKey("error") ? (int) orderResponse.get("status") : 200, response);
         } catch (IllegalArgumentException e) {
-            sendResponse(exchange, 400, "Invalid order");
+            sendResponse(exchange, 400, "{\"error\": \"Invalid order\"}");
         } catch (RuntimeException e) {
-            sendResponse(exchange, 400, e.getMessage());
+            sendResponse(exchange, 400, "{\"error\": \"" + e.getMessage() + "\"}");
         }
     }
     private void handleAddFavorite(HttpExchange exchange) throws IOException {

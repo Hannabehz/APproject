@@ -4,7 +4,10 @@ import com.google.gson.Gson;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import com.sun.net.httpserver.HttpExchange;
+import com.sun.net.httpserver.HttpHandler;
 import dto.OrderDTO;
+import dto.OrderResponseDTO;
+import entity.Order;
 import io.jsonwebtoken.JwtException;
 import service.DeliveryService;
 import util.JwtUtil;
@@ -13,9 +16,12 @@ import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.io.OutputStream;
+import java.net.URI;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
-public class DeliveryHttpHandler {
+public class DeliveryHttpHandler implements HttpHandler {
     private final DeliveryService deliveryService;
     private final Gson gson = new Gson();
     public DeliveryHttpHandler() {
@@ -29,7 +35,11 @@ public class DeliveryHttpHandler {
         }
         if (path.matches("/deliveries/[^/]+") && "PATCH".equals(method)) {
             handlePatchDeliveryStatus(exchange);
-        } else {
+        }
+        if ("/deliveries/history".equals(path) && "GET".equals(method)) {
+            handleDeliveryHistory(exchange);
+        }
+        else {
             exchange.sendResponseHeaders(404, -1);
             exchange.close();
         }
@@ -37,15 +47,16 @@ public class DeliveryHttpHandler {
     private void handleGetAvailableDeliveries(HttpExchange exchange) throws IOException {
         String authHeader = exchange.getRequestHeaders().getFirst("Authorization");
         if (!isAuthenticated(authHeader)) {
-            sendResponse(exchange, 401, "Unauthorized");
+            sendResponse(exchange, 401, "{\"error\": \"Unauthorized\", \"status\": 401}");
             return;
         }
-        try{
-            List<OrderDTO> availableOrders = deliveryService.getAvailableOrders(authHeader.substring(7));
+        try {
+            String token = authHeader.substring(7); // حذف "Bearer "
+            List<Order> availableOrders = deliveryService.getAvailableOrders(token);
             String response = gson.toJson(availableOrders);
             sendResponse(exchange, 200, response);
         } catch (RuntimeException e) {
-            sendResponse(exchange, 400, "Failed to retrieve available deliveries: " + e.getMessage());
+            sendResponse(exchange, 400, "{\"error\": \"" + e.getMessage() + "\", \"status\": 400}");
         }
     }
     private void handlePatchDeliveryStatus(HttpExchange exchange) throws IOException {
@@ -85,8 +96,24 @@ public class DeliveryHttpHandler {
             }
         }
     }
+    private void handleDeliveryHistory(HttpExchange exchange) throws IOException {
+        String authHeader = exchange.getRequestHeaders().getFirst("Authorization");
+        if (!isAuthenticated(authHeader)) {
+            sendResponse(exchange, 401, "{\"error\": \"Unauthorized\"}");
+            return;
+        }
+
+        try {
+            List<OrderResponseDTO> history = deliveryService.getDeliveryHistory(authHeader.substring(7));
+            String response = gson.toJson(history);
+            sendResponse(exchange, 200, response);
+        } catch (RuntimeException e) {
+            sendResponse(exchange, 500, "{\"error\": \"" + e.getMessage() + "\"}");
+        }
+    }
     private boolean isAuthenticated(String authHeader) {
         if (authHeader == null || !authHeader.startsWith("Bearer ")) {
+            System.out.println("Auth header is invalid");
             return false;
         }
         try {

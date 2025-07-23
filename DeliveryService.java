@@ -3,12 +3,14 @@ package service;
 import DAO.CourierDAO;
 import dto.OrderDTO;
 import dto.OrderItemDTO;
-import entity.Courier;
+import dto.OrderResponseDTO;
 import entity.Order;
+import entity.User;
 
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 import java.util.stream.Collectors;
 
 public class DeliveryService {
@@ -16,11 +18,11 @@ public class DeliveryService {
     public DeliveryService() {
         courierDAO = new CourierDAO();
     }
-    public List<OrderDTO> getAvailableOrders(String token) {
+    public List<Order> getAvailableOrders(String token) {
         if (token == null || token.trim().isEmpty())
             throw new IllegalArgumentException("Token is required");
         // پیدا کردن پیک
-        Courier courier = courierDAO.findCourierByToken(token);
+        User courier = courierDAO.findCourierByToken(token);
         if (courier == null) {
             throw new RuntimeException("Courier not found");
         }
@@ -31,18 +33,11 @@ public class DeliveryService {
         }
 
         // دریافت سفارش‌های در دسترس بر اساس منطقه پیک
-        List<Order> availableOrders = courierDAO.findAvailableOrders(courier.getWorkingRegion());
+        List<Order> availableOrders = courierDAO.findAvailableOrders();
 
         // تبدیل Order به OrderDTO
-        return availableOrders.stream().map(order -> new OrderDTO(
-                order.getId(),
-                order.getDeliveryAddress(),
-                order.getRestaurant().getId(),
-                order.getOrderItems().stream().map(item -> new OrderItemDTO(
-                        item.getFood().getId(),
-                        item.getQuantity()
-                )).collect(Collectors.toList())
-        )).collect(Collectors.toList());
+        return availableOrders;
+
     }
     public Map<String, Object> updateDeliveryStatus(String token, String orderId, String status) {
         // اعتبارسنجی اولیه
@@ -54,62 +49,84 @@ public class DeliveryService {
         }
 
         // پیدا کردن پیک
-        Courier courier = courierDAO.findCourierByToken(token);
+        User courier = courierDAO.findCourierByToken(token);
         if (courier == null) {
             throw new RuntimeException("Courier not found");
         }
 
-        // فرض می‌کنیم منطق دیتابیس توی DAO باشه، اینجا فقط به‌روزرسانی رو شبیه‌سازی می‌کنیم
-        try {
-            // پیدا کردن سفارش
-            Order order = courierDAO.findOrderById(orderId);
-            if (order == null) {
-                throw new RuntimeException("not found");
-            }
-
-            // چک کردن وضعیت فعلی و قوانین تغییر
-            String currentStatus = order.getStatus();
-            if ("delivered".equals(currentStatus)) {
-                throw new RuntimeException("invalid"); // نمی‌شه وضعیت تحویل‌شده رو تغییر داد
-            }
-            if ("accepted".equals(currentStatus) && !"received".equals(status) && !"delivered".equals(status)) {
-                throw new RuntimeException("invalid"); // فقط می‌تونه به received یا delivered بره
-            }
-            if ("received".equals(currentStatus) && !"delivered".equals(status)) {
-                throw new RuntimeException("invalid"); // فقط می‌تونه به delivered بره
-            }
-
-            // چک کردن اختصاص به پیک دیگه
-            Courier currentDeliveryMan = order.getDeliveryMan();
-            if (!"Pending".equals(currentStatus) && !currentDeliveryMan.getId().equals(courier.getId())) { // فرض می‌کنیم assignedCourierId وجود داره
-                throw new RuntimeException("assigned"); // قبلاً به پیک دیگه اختصاص داده شده
-            }
-
-            // به‌روزرسانی وضعیت
-            order.setStatus(status);
-            order.setDeliveryMan(courier); // جایگزین setAssignedCourierId
-            courierDAO.saveOrder(order); // فرض می‌کنیم این متد توی DAO هست
-            if(status.equals("delivered"))
-               courier.setStatus("Available");
-            else
-                courier.setStatus("Busy");
-
-            // آماده‌سازی پاسخ
-            Map<String, Object> response = new HashMap<>();
-            response.put("message", "Changed status successfully");
-            response.put("order", new OrderDTO(
-                    order.getId(),
-                    order.getDeliveryAddress(),
-                    order.getRestaurant().getId(),
-                    order.getOrderItems().stream().map(item -> new OrderItemDTO(
-                            item.getFood().getId(),
-                            item.getQuantity()
-                    )).collect(Collectors.toList())
-            ));
-            return response;
-        } catch (Exception e) {
-            System.err.println("Error in updateDeliveryStatus: " + e.getMessage());
-            throw new RuntimeException(e.getMessage());
+        // پیدا کردن سفارش
+        Order order = courierDAO.findOrderById(orderId);
+        if (order == null) {
+            throw new RuntimeException("not found");
         }
+
+        // چک کردن وضعیت فعلی و قوانین تغییر
+        String currentStatus = order.getDeliveryStatus();
+        if ("delivered".equals(currentStatus)) {
+            throw new RuntimeException("invalid"); // نمی‌شه وضعیت تحویل‌شده رو تغییر داد
+        }
+        if ("accepted".equals(currentStatus) && !"received".equals(status) && !"delivered".equals(status)) {
+            throw new RuntimeException("invalid"); // فقط می‌تونه به received یا delivered بره
+        }
+        if ("received".equals(currentStatus) && !"delivered".equals(status)) {
+            throw new RuntimeException("invalid"); // فقط می‌تونه به delivered بره
+        }
+
+        // چک کردن اختصاص به پیک دیگه
+        UUID currentCourierId = order.getCourierId();
+        if (currentStatus!=null && (currentCourierId == null || !currentCourierId.equals(courier.getId()))) {
+            throw new RuntimeException("assigned"); // قبلاً به پیک دیگه اختصاص داده شده
+        }
+
+        // به‌روزرسانی وضعیت
+        order.setStatus(status);
+        order.setCourierId(courier.getId()); // Changed from setDeliveryMan to setCourierId
+        courierDAO.saveOrder(order);
+        if (status.equals("delivered")) {
+            courier.setStatus("Available");
+        } else {
+            courier.setStatus("Busy");
+        }
+        courierDAO.saveCourier(courier); // فرض می‌کنیم متد saveCourier وجود داره
+
+        // آماده‌سازی پاسخ
+        Map<String, Object> response = new HashMap<>();
+        response.put("message", "Changed status successfully");
+        response.put("order", new OrderDTO(
+                order.getId(),
+                order.getDeliveryAddress(),
+                order.getRestaurant().getId(),
+                order.getOrderItems().stream().map(item -> new OrderItemDTO(
+                        item.getFood().getId(),
+                        item.getQuantity()
+                )).collect(Collectors.toList())
+        ));
+        return response;
+    }
+    public List<OrderResponseDTO> getDeliveryHistory(String token) {
+        if (token == null || token.trim().isEmpty()) {
+            throw new IllegalArgumentException("Token is required");
+        }
+
+        User courier = courierDAO.findCourierByToken(token);
+        List<Order> orders = courierDAO.findDeliveryHistory(courier.getId());
+
+        return orders.stream()
+                .map(order -> {
+                    OrderResponseDTO dto = new OrderResponseDTO();
+                    dto.setOrderId(order.getId());
+                    dto.setBuyerId(order.getCustomer().getId());
+                    dto.setVendorId(order.getRestaurant().getId());
+                    dto.setRestaurantName(order.getRestaurant().getName());
+                    dto.setDeliveryAddress(order.getDeliveryAddress());
+                    dto.setStatus(order.getStatus());
+                    dto.setPayPrice(order.getPayPrice());
+                    dto.setCreatedAt(order.getCreatedAt());
+                    dto.setItems(order.getOrderItems().stream()
+                            .map(item -> new OrderItemDTO(item.getFood().getId(), item.getQuantity()))
+                            .collect(Collectors.toList()));
+                    return dto;
+                })
+                .collect(Collectors.toList());
     }
 }

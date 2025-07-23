@@ -1,5 +1,7 @@
 package entity;
 
+import org.hibernate.annotations.Type;
+
 import java.util.UUID;
 import javax.persistence.*;
 @Entity
@@ -7,10 +9,13 @@ import javax.persistence.*;
 public class UserWallet {
 
     @Id
-    private UUID id = UUID.randomUUID();
+    @Column(columnDefinition = "BINARY(16)")
+    @Type(type = "uuid-binary")
+    private UUID id=UUID.randomUUID();
 
     @OneToOne
-    @JoinColumn(name = "user_id", nullable = false, unique = true)
+    @JoinColumn(name = "user_id", nullable = false, unique = true, columnDefinition = "BINARY(16)")
+    @Type(type = "uuid-binary")
     private User user;
 
     @Column(nullable = false)

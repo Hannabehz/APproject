@@ -1,17 +1,19 @@
 package entity;
+import org.hibernate.annotations.Type;
+
 import javax.persistence.*;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 
 @Entity
-@Inheritance(strategy = InheritanceType.SINGLE_TABLE)
-@DiscriminatorColumn(name = "user_type", discriminatorType = DiscriminatorType.STRING)
-@Table(name="users")
+@Table(name="user")
 public class User {
 
     @Id
-    private UUID id = UUID.randomUUID();
+    @Column(columnDefinition = "BINARY(16)")
+    @Type(type = "uuid-binary")
+    private UUID id=UUID.randomUUID();
 
     @Column(nullable = false)
     private String fullName;
@@ -29,7 +31,7 @@ public class User {
     private String role;
 
     @Column(nullable = false)
-    private String address;
+    protected String address;
     @Column
     private String profileImageBase64;
 
@@ -51,7 +53,16 @@ public class User {
             inverseJoinColumns = @JoinColumn(name = "restaurant_id")
     )
     private List<Restaurant> favorites = new ArrayList<>();
-    public User() {}
+    private String status;
+    public String getStatus() {
+        return status;
+    }
+    public void setStatus(String status) {
+        this.status = status;
+    }
+    public User() {
+        status="Available";
+    }
     public UUID getId() { return id; }
     public void setId(UUID id) { this.id = id; }
 
