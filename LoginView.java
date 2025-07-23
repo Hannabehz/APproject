@@ -6,6 +6,7 @@ import javafx.scene.Scene;
 import javafx.scene.control.*;
 import javafx.scene.layout.VBox;
 import javafx.stage.Stage;
+import model.UserDTO;
 import service.UserService;
 
 import java.io.IOException;
@@ -56,8 +57,24 @@ public class LoginView {
                                 String token = (String) response.get("token");
                                 messageLabel.setText("Success: " + message + " (Token: " + token + ")");
                                 authService.setToken("Bearer " + token); // ذخیره توکن
+                                Map<String, Object> user = (Map<String, Object>) response.get("user");
+                                String role = (String) user.get("role");
                                 try {
-                                    MainView mainView = new MainView(stage, token);
+
+                                      switch (role){
+                                          case("buyer"):
+                                             MainView mainView = new MainView(stage, token);
+                                             break;
+                                          case("courier"):
+                                             CourierMainView courierMainView = new CourierMainView(stage, token);
+                                             break;
+                                             case("seller"):
+                                                 DashboardView dashboardView = new DashboardView(stage, token);
+                                                 break;
+                                          default:
+                                             break;
+                                      }
+
                                 } catch (IOException ex) {
                                     messageLabel.setText("Error loading MainView: " + ex.getMessage());
                                     ex.printStackTrace(); // برای دیدن استثنای کامل توی کنسول
@@ -102,7 +119,7 @@ public class LoginView {
 
         vbox.getChildren().addAll(phoneLabel, phoneField, passwordLabel, passwordField, loginButton, signUpLink, messageLabel);
 
-        Scene scene = new Scene(vbox, 900, 900);
+        Scene scene = new Scene(vbox,900,900);
         stage.setScene(scene);
         stage.setTitle("Login");
         stage.show();
