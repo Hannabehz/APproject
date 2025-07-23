@@ -25,7 +25,7 @@ public class MainView {
         MainViewController controller = loader.getController();
         controller.setStage(stage);
         controller.setToken(token); // انتقال توکن
-        stage.setScene(new Scene(root, 900, 900));
+        stage.setScene(new Scene(root));
         stage.setTitle("Main View");
         stage.show();
     }

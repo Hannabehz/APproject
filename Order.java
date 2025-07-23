@@ -1,109 +1,105 @@
-package entity;
-import javax.persistence.*;
+package model;
+
+import com.google.gson.annotations.SerializedName;
 
 import java.time.LocalDateTime;
-import java.util.ArrayList;
-import java.util.List;
 import java.util.UUID;
 
-
-@Entity
-@Table(name="orders")
 public class Order {
-    @Id
-    private UUID id = UUID.randomUUID();
-    @ManyToOne
-    @JoinColumn(name = "user_id", nullable = false)
-    private User user;
-    @ManyToOne
-    @JoinColumn(name="deliveryMan_id")
-    private Courier deliveryMan;
-    @Column(name = "vendor_id")
-    private UUID vendorId;
-    @ManyToOne
-    @JoinColumn(name = "restaurant_id", nullable = false)
-    private Restaurant restaurant;
-    private LocalDateTime orderedDateTime;
+    @SerializedName("order_id")
+    private UUID id;
+
+    @SerializedName("delivery_address")
     private String deliveryAddress;
-    @OneToMany(mappedBy = "order",cascade = CascadeType.ALL)
-    private List<OrderItem> orderItems=new ArrayList<OrderItem>();
-    private int totalPrice;
-    @Column(nullable = false)
+
+    @SerializedName("restaurant")
+    private Restaurant restaurant;
+
+    @SerializedName("pay_price")
+    private int payPrice;
+
+    @SerializedName("created_at")
+    private LocalDateTime createdAt;
+
+    @SerializedName("status")
     private String status;
+
+    @SerializedName("delivery_status")
+    private String deliveryStatus;
+
+    // سازنده پیش‌فرض برای Gson
     public Order() {
-        status="Pending";
     }
-    public Order(User customer, Restaurant restaurant, Courier deliveryMan,String deliveryAddress) {
-        this.user = customer;
-        this.deliveryMan = deliveryMan;
-        this.orderedDateTime = LocalDateTime.now();
+
+    // سازنده با پارامترها
+    public Order(UUID id, String deliveryAddress, Restaurant restaurant, int payPrice, LocalDateTime createdAt, String status, String deliveryStatus) {
+        this.id = id;
         this.deliveryAddress = deliveryAddress;
         this.restaurant = restaurant;
-        status="Pending";
+        this.payPrice = payPrice;
+        this.createdAt = createdAt;
+        this.status = status;
+        this.deliveryStatus = deliveryStatus;
     }
+
+    // Getters و Setters
     public UUID getId() {
         return id;
     }
+
     public void setId(UUID id) {
         this.id = id;
     }
-    public User getCustomer() {
-        return user;
-    }
-    public void setCustomer(User customer) {
-        this.user = customer;
-    }
-    public Courier getDeliveryMan() {
-        return deliveryMan;
-    }
-    public void setDeliveryMan(Courier deliveryMan) {
-        this.deliveryMan = deliveryMan;
-    }
-    public LocalDateTime getOrderedDateTime() {
-        return orderedDateTime;
-    }
-    public void setOrderedDateTime(LocalDateTime orderedDateTime) {
-        this.orderedDateTime = orderedDateTime;
-    }
-    public List<OrderItem> getOrderItems() {
-        return orderItems;
-    }
-    public void setOrderItems(List<OrderItem> orderItems) {
-        this.orderItems = orderItems;
-    }
-    public int getTotalPrice() {
-        return totalPrice;
-    }
-    public void setTotalPrice(int totalPrice) {
-        this.totalPrice = totalPrice;
+
+    public String getDeliveryAddress() {
+        return deliveryAddress;
     }
 
     public void setDeliveryAddress(String deliveryAddress) {
-        this.deliveryAddress = deliveryAddress.trim();
+        this.deliveryAddress = deliveryAddress;
+    }
+
+    public Restaurant getRestaurant() {
+        return restaurant;
     }
 
     public void setRestaurant(Restaurant restaurant) {
         this.restaurant = restaurant;
     }
 
-
-    public String getDeliveryAddress() {
-        return deliveryAddress;
+    public String getRestaurantName() {
+        return restaurant != null ? restaurant.getName() : "";
     }
 
-    public Restaurant getRestaurant() {
-        return restaurant;
+    public int getPayPrice() {
+        return payPrice;
     }
+
+    public void setPayPrice(int payPrice) {
+        this.payPrice = payPrice;
+    }
+
+    public LocalDateTime getCreatedAt() {
+        return createdAt;
+    }
+
+    public void setCreatedAt(LocalDateTime createdAt) {
+        this.createdAt = createdAt;
+    }
+
     public String getStatus() {
         return status;
     }
+
     public void setStatus(String status) {
         this.status = status;
     }
-    public UUID getVendorId() {
-        return vendorId;
+
+    public String getDeliveryStatus() {
+        return deliveryStatus;
     }
-    public void setVendorId(UUID vendorId) {
-        this.vendorId = vendorId;
+
+    public void setDeliveryStatus(String deliveryStatus) {
+        this.deliveryStatus = deliveryStatus;
     }
 }
